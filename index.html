@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Fish Tank</title>
+        <style>
+            html, body{             
+                margin: 0;
+                height: 100%;
+                background: #1b1a22;
+                color: #d9d4c7;
+                font-family: 'Brush Script MT', cursive;
+                overflow: hidden;
+            }
+            body{
+                background: #060024;
+                flex-direction: column;  
+                justify-content: center;
+                display: flex;
+                align-items: center;
+            }
+            canvas {
+                background: #7e7e7e;
+                image-rendering: pixelated;
+                touch-action: none;
+                border: 2px solid #3a3746;
+                max-width: 90vw;
+                max-height: 60vh;
+                width: min(80vw, 80vh);
+                aspect-ratio: 4 / 3;
+            }
+            
+        </style>
+    </head>
+
+    <body>
+        <div class="title-card">
+            <h2>Fish in a Tank</h2>
+            <p>It's wetter than you think!</p>
+        </div>
+         <div class="matbar">
+            <button class="matbin active" data-material="mat0">Erase</button>
+            <button class="matbin" data-material="mat1">Small Fish</button>
+            <button class="matbin" data-material="mat2">Medium Fish</button>
+            <button class="matbin" data-material="mat3">Large Fish</button>
+            <button class="matbin" data-material="mat4">Algae</button>
+            <button class="tool danger" id="reset">Reset</button>
+        </div>
+
+        <canvas id="canvas" width="400" height="300"></canvas>
+        <script>
+
+            // Variables to change (IF YOU ARE GAME DESIGNER EDIT HERE)
+            /*
+             If hunger decreases to 0, fish dies.
+            
+            */
+            const hungerTick = 5; //rate of hunger decrease
+            const hungerRepro = 80; //minimum hunger to reproduce
+            const hungerCost = 20; //decrease in hunger when reproducing
+            const reproRadius = 5 //area in which fish can spawn another fish when "reproducing"
+            const hungerEat = [0, 40, 40, 40]; //hunger gained upon eating for Algae (KEEP 0), Small fish, Medium fish, Large fish
+            const startHunger = 50; //hunger fish start at when spawned
+            const algaeSpread = 0.1 //odds that algae spreads
+
+            // SCRIPT FOR GAME AND FISH
+            // IF YOU DO NOT KNOW HOW TO CODE PLEASE DO NOT TOUCH
+
+            //Materials and whatnot
+            const Erase = 0;
+            const SFishID = 1;
+            const MFishID = 2;
+            const LFishID = 3;
+            const algae = 1;
+            const height = 300;
+            const width = 400;
+            const area = height * width;
+
+
+            // WARNING!! This creates a 1D array!
+            // We will do a work around to test if objects are above each other, think modulo
+            const grid = new Uint16Array(area);      //tank
+            const movedAt = new Uint32Array(area);   //track what hapened here. 32 bit to go on for more than 20 minutes at 20tps
+            const dist = [null,new Uint16Array(area),new Uint16Array(area),new Uint16Array(area)]; // 
+            const queue = new Int32Array(area);      // scratch space for the pathfinding search
+            const bitLimit = 65535; //THIS IS NECESSARY DO NOT CHANGE THIS NUMBER UNLESS WE LEAVE 16BIT ARRAY
+            let tick = 1;
+
+
+            //get array pos based off row/col. may go unused?
+            function getPos(x,y){
+                return grid[x*width+y];
+               }
+            // Check if particle would be in bound. Use during calculations to make sure particles dont do that.
+            function getBound(x,y){
+                return x >= 0 && x < W && y >= 0 && y < H;
+            }
+            // Directions starting from North at start
+            const dir = [[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1],[-1,-1]];    
+
+            //tyype of fish
+            function fishType(f){
+                return f >= 100 ? Math.floor(f / 100) : 0;
+            }
+
+            //can fish eat this? fnction
+            function canEat(food,fish){
+                if (fish = SFishID) {return food = algae};
+                return v>=200 && fishType(fish) === food-1;
+            }
+
+
+            //bfs function for finding food
+            function foodField(t){
+            const map = dist[t];
+            map.fill(bitLimit);                 // everything start unreachable
+            let head = 0, tail = 0;
+
+            // seed the queue with every food cell at distance 0
+            for (let i = 0; i < area; i++){
+                if (canEat(t, grid[i])){
+                    map[i] = 0;
+                  queue[tail++] = i;
+                }
+            }
+            if (tail === 0) return false;
+            while (head < tail){
+            const i = queue[head++];
+            const x = i % width;
+            const y = Math.floor(i / width);
+            const next = map[i] + 1;
+            for (let k = 0; k < 8; k++){
+                const nx = x + dir[k][0]; //nx += k,0 indice, (North first?)
+                const ny = y + dir[k][1]; //see above 
+                if (!getBound(nx, ny)) continue;     // off edge
+                    const j = getPos(nx, ny);
+                    if (map[j] !== bitLimit) continue;   // already reached
+                    if (grid[j] === algae) continue;     //ignore algae
+                    map[j] = next; //join line
+                    queue[tail++] = j;
+                }
+            }
+                return true;
+            }   
+
+            
+            //function that runs ticks to get game going
+            function step(){
+                
+            }
+
+            //canvas and whatnot do later and tonight!!!!!
+        </script>
+    </body>
+</html>
