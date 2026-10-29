@@ -1,138 +1,152 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Fish Tank</title>
-        <style>
-            html, body{             
-                margin: 0;
-                height: 100%;
-                background: #1b1a22;
-                color: #d9d4c7;
-                font-family: 'Brush Script MT', cursive;
-                overflow: hidden;
-            }
-            body{
-                background: #060024;
-                flex-direction: column;  
-                justify-content: center;
-                display: flex;
-                align-items: center;
-            }
-            canvas {
-                background: #7e7e7e;
-                image-rendering: pixelated;
-                touch-action: none;
-                border: 2px solid #3a3746;
-                max-width: 90vw;
-                max-height: 60vh;
-                width: min(80vw, 80vh);
-                aspect-ratio: 4 / 3;
-            }
-            
-        </style>
-    </head>
 
-    <body>
-        <div class="title-card">
-            <h2>Fish in a Tank</h2>
-            <p>It's wetter than you think!</p>
-        </div>
-         <div class="matbar">
-            <button class="matbin active" data-material="mat0">Erase</button>
-            <button class="matbin" data-material="mat1">Small Fish</button>
-            <button class="matbin" data-material="mat2">Medium Fish</button>
-            <button class="matbin" data-material="mat3">Large Fish</button>
-            <button class="matbin" data-material="mat4">Algae</button>
-            <button class="tool danger" id="reset">Reset</button>
-        </div>
+<head>
+    <meta charset="UTF-8">
+    <title>Fish Tank</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+            background: #1b1a22;
+            color: #d9d4c7;
+            font-family: 'Brush Script MT', cursive;
+            overflow: hidden;
+        }
 
-        <canvas id="canvas" width="400" height="300"></canvas>
-        <script>
+        body {
+            background: #060024;
+            flex-direction: column;
+            justify-content: center;
+            display: flex;
+            align-items: center;
+        }
 
-            // Variables to change (IF YOU ARE GAME DESIGNER EDIT HERE)
-            /*
-             If hunger decreases to 0, fish dies.
-            
-            */
-            const hungerTick = 5; //rate of hunger decrease
-            const hungerRepro = 80; //minimum hunger to reproduce
-            const hungerCost = 20; //decrease in hunger when reproducing
-            const reproRadius = 5 //area in which fish can spawn another fish when "reproducing"
-            const hungerEat = [0, 40, 40, 40]; //hunger gained upon eating for Algae (KEEP 0), Small fish, Medium fish, Large fish
-            const startHunger = 50; //hunger fish start at when spawned
-            const algaeSpread = 0.1 //odds that algae spreads
+        canvas {
+            background: #7e7e7e;
+            image-rendering: pixelated;
+            touch-action: none;
+            border: 2px solid #3a3746;
+            max-width: 90vw;
+            max-height: 60vh;
+            width: min(80vw, 80vh);
+            aspect-ratio: 4 / 3;
+        }
 
-            // SCRIPT FOR GAME AND FISH
-            // IF YOU DO NOT KNOW HOW TO CODE PLEASE DO NOT TOUCH
+        .matbin.active {
+            border-color: #ffedba;
+            background: #ffffff;
+        }
 
-            //Materials and whatnot
-            const Erase = 0;
-            const SFishID = 1;
-            const MFishID = 2;
-            const LFishID = 3;
-            const algae = 1;
-            const height = 300;
-            const width = 400;
-            const area = height * width;
+    </style>
+</head>
 
+<body>
+    <div class="title-card">
+        <h2>Fish in a Tank</h2>
+        <p>It's wetter than you think!</p>
+    </div>
+    <div class="matbar">
+        <button class="matbin active" data-material="mat0">Erase</button>
+        <button class="matbin" data-material="mat1">Small Fish</button>
+        <button class="matbin" data-material="mat2">Medium Fish</button>
+        <button class="matbin" data-material="mat3">Large Fish</button>
+        <button class="matbin" data-material="mat4">Algae</button>
+        <button class="tool danger" id="reset">Reset</button>
+    </div>
 
-            // WARNING!! This creates a 1D array!
-            // We will do a work around to test if objects are above each other, think modulo
-            const grid = new Uint16Array(area);      //tank
-            const movedAt = new Uint32Array(area);   //track what hapened here. 32 bit to go on for more than 20 minutes at 20tps
-            const dist = [null,new Uint16Array(area),new Uint16Array(area),new Uint16Array(area)]; // 
-            const queue = new Int32Array(area);      // scratch space for the pathfinding search
-            const bitLimit = 65535; //THIS IS NECESSARY DO NOT CHANGE THIS NUMBER UNLESS WE LEAVE 16BIT ARRAY
-            let tick = 1;
+    <canvas id="canvas" width="400" height="300"></canvas>
+    <script>
+
+        // Variables to change (IF YOU ARE GAME DESIGNER EDIT HERE)
+        /*
+         If hunger decreases to 0, fish dies.
+        
+        */
+        const hungerTick = 30; //rate of hunger decrease
+        const hungerRepro = 80; //minimum hunger to reproduce
+        const hungerCost = 20; //decrease in hunger when reproducing
+        const reproRadius = 5; //area in which fish can spawn another fish when "reproducing"
+        const reproChance = 0.1 //odds per tick of reproduciton
+        const TPS = 20 //ticks per second (server speed kinda)
+        const hungerEat = [0, 40, 40, 40]; //hunger gained upon eating for Algae (KEEP 0), Small fish, Medium fish, Large fish
+        const startHunger = 50; //hunger fish start at when spawned
+        const algaeSpread = 0.1; //odds that algae spreads
+        const algaeRand = 30000; //random area where algae is allowed to spawn
+        const brushSize = 10;
 
 
-            //get array pos based off row/col. may go unused?
-            function getPos(x,y){
-                return grid[x*width+y];
-               }
-            // Check if particle would be in bound. Use during calculations to make sure particles dont do that.
-            function getBound(x,y){
-                return x >= 0 && x < W && y >= 0 && y < H;
-            }
-            // Directions starting from North at start
-            const dir = [[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1],[-1,-1]];    
+        // SCRIPT FOR GAME AND FISH
+        // IF YOU DO NOT KNOW HOW TO CODE PLEASE DO NOT TOUCH
 
-            //tyype of fish
-            function fishType(f){
-                return f >= 100 ? Math.floor(f / 100) : 0;
-            }
-
-            //can fish eat this? fnction
-            function canEat(food,fish){
-                if (fish = SFishID) {return food = algae};
-                return v>=200 && fishType(fish) === food-1;
-            }
+        //Materials and whatnot
+        const Erase = 0;
+        const SFishID = 1;
+        const MFishID = 2;
+        const LFishID = 3;
+        const algae = 1;
+        const height = 300;
+        const width = 400;
+        const area = height * width;
 
 
-            //bfs function for finding food
-            function foodField(t){
+        // WARNING!! This creates a 1D array!
+        // We will do a work around to test if objects are above each other, think modulo
+        const grid = new Uint16Array(area);      //tank
+        const movedAt = new Uint32Array(area);   //track what hapened here. 32 bit to go on for more than 20 minutes at 20tps
+        const dist = [null, new Uint16Array(area), new Uint16Array(area), new Uint16Array(area)]; // 
+        const queue = new Int32Array(area);      // scratch space for the pathfinding search
+        const bitLimit = 65535; //THIS IS NECESSARY DO NOT CHANGE THIS NUMBER UNLESS WE LEAVE 16BIT ARRAY
+        let tick = 1;
+
+
+        //get array pos based off row/col. may go unused?
+        function getPos(x, y) {
+            return y * width + x;
+        }
+        // Check if particle would be in bound. Use during calculations to make sure particles dont do that.
+        function getBound(x, y) {
+            return x >= 0 && x < width && y >= 0 && y < height;
+        }
+        // Directions starting from North at start
+        const dir = [[0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1], [-1, -1]];
+
+        //tyype of fish
+        function fishType(f) {
+            return f >= 100 ? Math.floor(f / 100) : 0;
+        }
+
+        //can fish eat this? fnction
+        function canEat(food, fish) {
+            if (fish === SFishID) { return food === algae };
+            return fish >= 100 && fishType(fish) === food - 1;
+        }
+
+
+        //bfs function for finding food
+        function foodField(t) {
             const map = dist[t];
             map.fill(bitLimit);                 // everything start unreachable
             let head = 0, tail = 0;
 
             // seed the queue with every food cell at distance 0
-            for (let i = 0; i < area; i++){
-                if (canEat(t, grid[i])){
+            for (let i = 0; i < area; i++) {
+                if (canEat(t, grid[i])) {
                     map[i] = 0;
-                  queue[tail++] = i;
+                    queue[tail++] = i;
                 }
             }
             if (tail === 0) return false;
-            while (head < tail){
-            const i = queue[head++];
-            const x = i % width;
-            const y = Math.floor(i / width);
-            const next = map[i] + 1;
-            for (let k = 0; k < 8; k++){
-                const nx = x + dir[k][0]; //nx += k,0 indice, (North first?)
-                const ny = y + dir[k][1]; //see above 
-                if (!getBound(nx, ny)) continue;     // off edge
+            while (head < tail) {
+                const i = queue[head++];
+                const x = i % width;
+                const y = Math.floor(i / width);
+                const next = map[i] + 1;
+                for (let k = 0; k < 8; k++) {
+                    const nx = x + dir[k][0]; //nx += k,0 indice, (North first?)
+                    const ny = y + dir[k][1]; //see above 
+                    if (!getBound(nx, ny)) continue;     // off edge
                     const j = getPos(nx, ny);
                     if (map[j] !== bitLimit) continue;   // already reached
                     if (grid[j] === algae) continue;     //ignore algae
@@ -140,16 +154,252 @@
                     queue[tail++] = j;
                 }
             }
-                return true;
-            }   
+            return true;
+        }
 
-            
-            //function that runs ticks to get game going
-            function step(){
-                
+        //function that finds closest empty
+        function findEmpty(pos) {
+            const x = pos % width;
+            const y = Math.floor(pos / width);
+            for (let r = 1; r <= reproRadius; r++) {          // ring order (spread)
+                let pick = -1, seen = 0;
+                for (let dy = -r; dy <= r; dy++) {
+                    for (let dx = -r; dx <= r; dx++) {
+                        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // oring edge
+                        const nx = x + dx, ny = y + dy;
+                        if (!getBound(nx, ny)) continue;
+                        const j = getPos(nx, ny);
+                        if (grid[j] === Erase) {              // 0 = empty = erase
+                            seen++;
+                            if (Math.random() * seen < 1) pick = j;
+                        }
+                    }
+                }
+                if (pick >= 0) return pick;                  // closest ring gets tge fusg
+            }
+            return -1;                                       // no room, no fish
+        }
+
+        //where fish go? nobody know.
+        function whereGo(pos, t, hasField) {
+            const x = pos % width;
+            const y = Math.floor(pos / width);
+            const start = Math.floor(Math.random() * 8);   //rand. start dir.
+            const map = dist[t];
+
+            //find food (primal)
+            if (hasField && map[pos] !== bitLimit) {
+                const cur = map[pos];
+                let best = -1, bestD = bitLimit + 1;
+                for (let n = 0; n < 8; n++) {
+                    const k = (start + n) % 8;
+                    const nx = x + dir[k][0], ny = y + dir[k][1];
+                    if (!getBound(nx, ny)) continue;
+                    const j = getPos(nx, ny);
+                    if (map[j] > cur) continue;
+                    if (grid[j] !== Erase && !canEat(t, grid[j])) continue;
+                    if (map[j] < bestD) { bestD = map[j]; best = j; }
+                }
+                return best;
+            }
+            //foodless (drifter)
+            if (Math.random() < 0.3) return -1;
+            for (let n = 0; n < 8; n++) {
+                const k = (start + n) % 8;
+                const nx = x + dir[k][0], ny = y + dir[k][1];
+                if (!getBound(nx, ny)) continue;
+                const j = getPos(nx, ny);
+                if (grid[j] === Erase) return j;
+            }
+            return -1;
+        }
+
+        //alge growing function
+        const algaeDirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];   // up, right, down, left
+        function growAlgae() {
+            for (let s = 0; s < algaeRand; s++) {
+                const i = Math.floor(Math.random() * area);
+                if (grid[i] !== algae) continue;
+                if (Math.random() > algaeSpread) continue;      // algae chance change here
+                const d = algaeDirs[Math.floor(Math.random() * 4)];
+                const nx = (i % width) + d[0];
+                const ny = Math.floor(i / width) + d[1];
+                if (!getBound(nx, ny)) continue;
+                const j = getPos(nx, ny);
+                if (grid[j] === Erase) grid[j] = algae;
+            }
+        }
+
+
+        //canvas and color!!
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const img = ctx.createImageData(width, height);
+        const px = new Uint32Array(img.data.buffer);
+        function rgba(r, g, b) { return (255 << 24) | (b << 16) | (g << 8) | r; }
+        // color of water and algae
+        const waterColor = rgba(10, 52, 84);
+        const algaeColor = rgba(74, 196, 106);
+        // color of fish
+        const fishNormal = [null, rgba(190, 157, 55), rgba(190, 103, 57), rgba(144, 92, 191)];
+        const fishReady = [null, rgba(255, 210, 74), rgba(255, 138, 76), rgba(192, 123, 255)];
+        function render() {
+            for (let i = 0; i < area; i++) {
+                const v = grid[i];
+                if (v === Erase) px[i] = waterColor;
+                else if (v === algae) px[i] = algaeColor;
+                else {
+                    const t = fishType(v);
+                    px[i] = (v % 100 > hungerRepro) ? fishReady[t] : fishNormal[t];
+                }
+            }
+            ctx.putImageData(img, 0, 0);
+        }
+
+
+        // drawing bs
+        const AlgaeTool = 4;
+        let tool = Erase;
+        const buttons = document.querySelectorAll(".matbin");
+        buttons.forEach(b => b.addEventListener("click", () => {
+            tool = Number(b.dataset.material.replace("mat", ""));   // "mat3" -> 3
+            buttons.forEach(o => o.classList.toggle("active", o === b));
+        }));
+        document.getElementById("reset").addEventListener("click", () => {
+            grid.fill(0);
+            movedAt.fill(0);
+            tick = 1;
+        });
+        function paintAt(cx, cy) {
+            const r = brushSize - 1;
+            for (let dy = -r; dy <= r; dy++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    if (dx * dx + dy * dy > r * r + r * 0.5) continue;      // round brush
+                    const x = cx + dx, y = cy + dy;
+                    if (!getBound(x, y)) continue;
+                    const i = getPos(x, y);
+                    if (tool === Erase) {
+                        grid[i] = Erase;
+                    } else if (tool === AlgaeTool) {
+                        if (grid[i] === Erase) grid[i] = algae;
+                    } else if (grid[i] === Erase) {
+                        if (r > 0 && Math.random() > 0.35) continue; // fish are sprinkled, not solid
+                        grid[i] = tool * 100 + startHunger;          // tool number = fish type
+                    }
+                }
+            }
+        }
+        let drawing = false, lastX = 0, lastY = 0;
+        function cellFromEvent(e) {
+            const rect = canvas.getBoundingClientRect();
+            return [Math.floor((e.clientX - rect.left) / rect.width * width),
+            Math.floor((e.clientY - rect.top) / rect.height * height)];
+        }
+        canvas.addEventListener("pointerdown", e => {
+            drawing = true;
+            canvas.setPointerCapture(e.pointerId);
+            [lastX, lastY] = cellFromEvent(e);
+            paintAt(lastX, lastY);
+        });
+        canvas.addEventListener("pointermove", e => {
+            if (!drawing) return;
+            const [x, y] = cellFromEvent(e);
+            const steps = Math.max(Math.abs(x - lastX), Math.abs(y - lastY), 1);
+            for (let s = 1; s <= steps; s++) {            // fill the gaps if the mouse moved fast
+                paintAt(Math.round(lastX + (x - lastX) * s / steps),
+                    Math.round(lastY + (y - lastY) * s / steps));
+            }
+            lastX = x; lastY = y;
+        });
+        canvas.addEventListener("pointerup", () => { drawing = false; });
+        canvas.addEventListener("pointercancel", () => { drawing = false; });
+        // bs over
+
+        //function that runs ticks to get game going
+        function step() {
+            tick++;
+            //fish map
+            const fish = [];
+            const present = [false, false, false, false];
+            for (let i = 0; i < area; i++) {
+                const v = grid[i];
+                if (v >= 100) {
+                    fish.push(i);
+                    present[fishType(v)] = true;
+                }
+            }
+            //fish food map
+            const hasField = [false, false, false, false];
+            for (let t = 1; t <= 3; t++) {
+                if (present[t]) hasField[t] = foodField(t);
             }
 
-            //canvas and whatnot do later and tonight!!!!!
-        </script>
-    </body>
+            //rand start fish
+            for (let i = fish.length - 1; i > 0; i--) {
+                const r = Math.floor(Math.random() * (i + 1));
+                const tmp = fish[i]; fish[i] = fish[r]; fish[r] = tmp;
+            }
+
+            const decay = (tick % hungerTick === 0);   //hungerTick drop on multiple
+
+            //fish do things
+            for (let f = 0; f < fish.length; f++) {
+                const pos = fish[f];
+                if (movedAt[pos] === tick) continue;   //newborn
+                const v = grid[pos];
+                if (v < 100) continue;                 //eaten fish
+                const t = fishType(v);
+                let h = v % 100;                      
+
+                // hunger and death
+                if (decay) h--;
+                if (h <= 0) { grid[pos] = Erase; continue; }   // if fish hungry, die
+
+                // reproduction
+                if (h > hungerRepro && Math.random() < reproChance) {
+                    const c = findEmpty(pos);
+                    if (c >= 0) {
+                        grid[c] = t * 100 + startHunger;        
+                        movedAt[c] = tick;             // fish not act on birth tick
+                        h -= hungerCost;
+                    }                                  
+                }
+
+                // movement and eating
+                const j = whereGo(pos, t, hasField[t]);
+                if (j >= 0) {
+                    if (canEat(t, grid[j])) {
+                        h = Math.min(99, h + hungerEat[t]);   // meal, capped so ID stays 3 digits
+                    }
+                    grid[j] = t * 100 + h;             // move (or eat by overwriting the food)
+                    grid[pos] = Erase;
+                    movedAt[j] = tick;
+                } else {
+                    grid[pos] = t * 100 + h;           // stayed put, save updated hunger
+                }
+            }
+
+            growAlgae();
+        }
+
+        //
+        let last = performance.now(), acc = 0;
+        function frame(now) {
+            acc += Math.min(now - last, 250);       // time since last frame
+            last = now;
+            const interval = 1000 / TPS;
+            let guard = 0;
+            while (acc >= interval && guard++ < 5) {
+                step();
+                acc -= interval;
+            }
+            render();
+            requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+
+        //canvas and whatnot do later and tonight!!!!!
+    </script>
+</body>
+
 </html>
