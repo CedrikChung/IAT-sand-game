@@ -38,7 +38,6 @@
             border-color: #ffedba;
             background: #ffffff;
         }
-
     </style>
 </head>
 
@@ -349,7 +348,7 @@
                 const v = grid[pos];
                 if (v < 100) continue;                 //eaten fish
                 const t = fishType(v);
-                let h = v % 100;                      
+                let h = v % 100;
 
                 // hunger and death
                 if (decay) h--;
@@ -359,14 +358,15 @@
                 if (h > hungerRepro && Math.random() < reproChance) {
                     const c = findEmpty(pos);
                     if (c >= 0) {
-                        grid[c] = t * 100 + startHunger;        
+                        grid[c] = t * 100 + startHunger;
                         movedAt[c] = tick;             // fish not act on birth tick
                         h -= hungerCost;
-                    }                                  
+                    }
                 }
 
                 // movement and eating
-                const j = whereGo(pos, t, hasField[t]);
+                const hungry = h <= hungerRepro;                      
+                const j = whereGo(pos, t, hasField[t] && hungry);      // full fish ignore food and drift
                 if (j >= 0) {
                     if (canEat(t, grid[j])) {
                         h = Math.min(99, h + hungerEat[t]);   // meal, capped so ID stays 3 digits
